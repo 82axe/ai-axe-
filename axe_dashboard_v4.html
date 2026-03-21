@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AXE — 설계자 대시보드 v4</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=Noto+Sans+KR:wght@300;400;500&display=swap" rel="stylesheet">
+
+<!-- Firebase -->
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+  import { getFirestore, collection, addDoc, getDocs, query, orderBy, where, deleteDoc, doc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAUFESJ3HOymKHLJ0frdHwTZv84fJJe_OU",
+    authDomain: "ai-dashboard-a1258.firebaseapp.com",
+    projectId: "ai-dashboard-a1258",
+    storageBucket: "ai-dashboard-a1258.firebasestorage.app",
+    messagingSenderId: "452914814701",
+    appId: "1:452914814701:web:25ea3f9819113dbb4db6e4"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  const WORKER_URL = 'https://cold-leaf-86c9axe-api.www-exclusive-82.workers.dev';
+
+  window._db = db;
+  window._col = collection;
+  window._addDoc = addDoc;
+  window._getDocs = getDocs;
+  window._query = query;
+  window._orderBy = orderBy;
+  window._where = where;
+  window._deleteDoc = deleteDoc;
+  window._doc = doc;
+  window._WORKER_URL = WORKER_URL;
+  window._firebaseReady = true;
+  window.dispatchEvent(new Event('firebaseReady'));
+</script>
+
+<style>
+:root {
+  --bg:#0a0a0b;--bg2:#111114;--bg3:#18181c;
+  --border:#2a2a30;--border2:#3a3a44;
+  --text:#e8e8ec;--text2:#8888a0;--text3:#555566;
+  --accent:#c8a96e;--accent2:#a07840;
+  --teal:#4ecdc4;--purple:#9b8fdb;--coral:#e07070;
+  --green:#5aad7a;--blue:#6a9fd8;--pink:#d4789a;
+  --mono:'IBM Plex Mono',monospace;--sans:'Noto Sans KR',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;height:100vh;overflow:hidden;}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:40px 40px;opacity:0.18;pointer-events:none;z-index:0;}
+.layout{display:flex;height:100vh;position:relative;z-index:1;}
+
+/* 사이드바 */
+.sidebar{width:210px;min-width:210px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
+.sidebar-logo{padding:16px 16px 12px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.logo-mark{font-family:var(--mono);font-size:20px;font-weight:500;color:var(--accent);letter-spacing:4px;}
+.logo-sub{font-family:var(--mono);font-size:8px;color:var(--text3);letter-spacing:2px;margin-top:3px;}
+
+.pinned-section{padding:10px 10px 8px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.pinned-label{font-family:var(--mono);font-size:8px;color:var(--accent);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;padding:0 4px;}
+.pinned-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;cursor:pointer;transition:all 0.12s;background:var(--bg3);border:1px solid var(--border2);color:var(--accent);}
+.pinned-item:hover,.pinned-item.active{border-color:var(--accent);background:#1e1a12;}
+.pinned-name{font-size:12px;font-weight:500;}
+.pinned-desc{font-size:10px;color:var(--accent2);margin-top:1px;}
+
+.sidebar-nav{flex:1;overflow-y:auto;padding:6px 0 8px;}
+.sidebar-nav::-webkit-scrollbar{width:2px;}
+.sidebar-nav::-webkit-scrollbar-thumb{background:var(--border2);}
+
+.folder{margin-bottom:2px;}
+.folder-header{display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;transition:all 0.12s;user-select:none;}
+.folder-header:hover{background:var(--bg3);}
+.folder-arrow{font-family:var(--mono);font-size:9px;color:var(--text3);transition:transform 0.2s;flex-shrink:0;}
+.folder-arrow.open{transform:rotate(90deg);}
+.folder-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.folder-name{font-family:var(--mono);font-size:10px;letter-spacing:1px;flex:1;}
+.folder-count{font-family:var(--mono);font-size:9px;color:var(--text3);}
+.folder-items{display:none;}
+.folder-items.open{display:block;}
+.nav-item{display:flex;align-items:center;gap:8px;padding:6px 12px 6px 26px;cursor:pointer;transition:all 0.12s;color:var(--text2);font-size:12px;border-left:2px solid transparent;}
+.nav-item:hover{background:var(--bg3);color:var(--text);}
+.nav-item.active{background:var(--bg3);color:var(--text);border-left-color:var(--accent);}
+.nav-num{font-family:var(--mono);font-size:9px;color:var(--text3);min-width:18px;flex-shrink:0;}
+
+.sidebar-footer{padding:10px 14px;border-top:1px solid var(--border);flex-shrink:0;}
+.db-status{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:9px;color:var(--text3);margin-bottom:4px;}
+.status-dot{width:5px;height:5px;border-radius:50%;background:var(--coral);flex-shrink:0;}
+.status-dot.on{background:var(--green);box-shadow:0 0 4px var(--green);animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* 메인 */
+.main{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden;}
+.topbar{height:46px;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 18px;gap:10px;background:var(--bg2);flex-shrink:0;}
+.topbar-module{font-family:var(--mono);font-size:10px;color:var(--text2);letter-spacing:1px;}
+.topbar-module span{color:var(--accent);}
+.topbar-spacer{flex:1;}
+.btn{background:var(--bg3);border:1px solid var(--border2);border-radius:5px;padding:5px 11px;font-family:var(--mono);font-size:10px;color:var(--text2);cursor:pointer;transition:all 0.12s;white-space:nowrap;}
+.btn:hover{border-color:var(--accent2);color:var(--accent);}
+.btn.danger:hover{border-color:var(--coral);color:var(--coral);}
+
+/* 채팅 */
+.chat-wrap{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;}
+.chat-header{padding:10px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;background:var(--bg2);flex-shrink:0;}
+.chat-title{font-family:var(--mono);font-size:11px;color:var(--text2);}
+.chat-badge{font-family:var(--mono);font-size:8px;padding:2px 7px;border-radius:20px;border:1px solid;}
+.persona-desc{font-size:11px;color:var(--text3);flex:1;}
+.chat-area{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:12px;}
+.chat-area::-webkit-scrollbar{width:3px;}
+.chat-area::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+
+.msg{display:flex;gap:10px;animation:fadeUp 0.2s ease;}
+.msg.user{flex-direction:row-reverse;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.msg-av{width:26px;height:26px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:9px;font-weight:500;flex-shrink:0;margin-top:2px;}
+.msg.user .msg-av{background:var(--accent2);color:#fff;}
+.msg.agent .msg-av{background:var(--bg3);border:1px solid var(--border2);color:var(--text2);}
+.msg-bubble{max-width:74%;padding:9px 13px;border-radius:7px;line-height:1.75;font-size:13px;}
+.msg.user .msg-bubble{background:var(--bg3);border:1px solid var(--border2);border-top-right-radius:2px;}
+.msg.agent .msg-bubble{background:var(--bg2);border:1px solid var(--border);border-top-left-radius:2px;}
+.msg-bubble.thinking{color:var(--text3);font-family:var(--mono);font-size:11px;}
+.thinking-dots span{animation:blink 1.2s infinite;opacity:0;}
+.thinking-dots span:nth-child(2){animation-delay:0.2s;}
+.thinking-dots span:nth-child(3){animation-delay:0.4s;}
+@keyframes blink{0%,80%,100%{opacity:0}40%{opacity:1}}
+.msg-bubble strong{color:var(--accent);font-weight:500;}
+.msg-bubble code{background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:1px 5px;font-family:var(--mono);font-size:11px;color:var(--teal);}
+
+.chat-input-area{padding:10px 18px 14px;border-top:1px solid var(--border);background:var(--bg2);flex-shrink:0;}
+.input-row{display:flex;gap:8px;align-items:flex-end;}
+.chat-ta{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:7px;padding:9px 12px;font-family:var(--sans);font-size:13px;color:var(--text);resize:none;outline:none;min-height:40px;max-height:110px;line-height:1.6;transition:border-color 0.12s;}
+.chat-ta:focus{border-color:var(--border2);}
+.chat-ta::placeholder{color:var(--text3);}
+.send-btn{background:var(--accent2);border:1px solid var(--accent);border-radius:7px;width:40px;height:40px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.12s;color:#fff;flex-shrink:0;}
+.send-btn:hover{background:var(--accent);}
+.send-btn:disabled{opacity:0.35;cursor:not-allowed;}
+
+.empty-state{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--text3);}
+.empty-mark{font-family:var(--mono);font-size:32px;color:var(--border2);letter-spacing:6px;}
+.empty-text{font-family:var(--mono);font-size:11px;letter-spacing:1px;}
+.save-badge{font-family:var(--mono);font-size:9px;color:var(--green);padding:1px 6px;border:1px solid var(--green);border-radius:10px;margin-left:6px;opacity:0;transition:opacity 0.3s;}
+.save-badge.show{opacity:1;}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-mark">AXE</div>
+    <div class="logo-sub">설계자 대시보드 v4.0</div>
+  </div>
+  <div class="pinned-section">
+    <div class="pinned-label">📌 고정</div>
+    <div class="pinned-item" id="pin-classics" onclick="selectPersona('classics')">
+      <div>
+        <div class="pinned-name">고전 책사</div>
+        <div class="pinned-desc">손자·노자·장자·한비자</div>
+      </div>
+    </div>
+  </div>
+  <nav class="sidebar-nav" id="sidebar-nav"></nav>
+  <div class="sidebar-footer">
+    <div class="db-status">
+      <div class="status-dot" id="db-dot"></div>
+      <span id="db-text">Firebase 연결 중...</span>
+    </div>
+  </div>
+</aside>
+
+<main class="main">
+  <div class="topbar">
+    <div class="topbar-module">AXE / <span id="topbar-name">—</span></div>
+    <div class="topbar-spacer"></div>
+    <span class="save-badge" id="save-badge">저장됨</span>
+    <button class="btn danger" onclick="clearCurrent()" style="margin-left:8px;">대화 초기화</button>
+  </div>
+
+  <div class="chat-wrap" id="chat-wrap">
+    <div class="empty-state" id="empty-state">
+      <div class="empty-mark">AXE</div>
+      <div class="empty-text">좌측에서 에이전트를 선택하세요</div>
+      <div style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-top:4px;">대화 기록은 Firebase에 자동 저장됩니다</div>
+    </div>
+    <div id="chat-ui" style="display:none;flex:1;flex-direction:column;min-height:0;overflow:hidden;">
+      <div class="chat-header">
+        <div class="chat-title" id="chat-title">—</div>
+        <span class="chat-badge" id="chat-badge"></span>
+        <div class="persona-desc" id="persona-desc"></div>
+      </div>
+      <div class="chat-area" id="chat-area"></div>
+      <div class="chat-input-area">
+        <div class="input-row">
+          <textarea class="chat-ta" id="chat-input" placeholder="메시지를 입력하세요..." rows="1"
+            onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+          <button class="send-btn" id="send-btn" onclick="sendMsg()">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+              <path d="M14 8L2 2l3 6-3 6 12-6z" fill="currentColor"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+</div>
+
+<script>
+const WORKER_URL = 'https://cold-leaf-86c9axe-api.www-exclusive-82.workers.dev';
+
+const FOLDERS = [
+  { id:'keychat', name:'키챗', color:'#9b8fdb', personas:[
+    {id:'kc1',num:'01',name:'제품 설계자',short:'기능·UX·방향성',system:`넌 키챗(키워드 챗) 전담 제품 설계자야.\n키챗 미션: "키워드로 연결되는 세상, 관계 이전에 관심이 먼저"\n현재 v5 구조(Home/Chat/SNS피드/뉴스탭) 완전히 숙지하고 있어.\n기능 기획, UX 구조, 화면 설계, 기능 우선순위 판단 담당.\n"이 기능이 미션에 맞는가" 항상 검증해줘.\nAXE는 1인 개발자라 리소스 한계 고려해서 현실적으로 조언해.\n간결하고 결론 먼저. 한국어로.`},
+    {id:'kc2',num:'02',name:'프론트엔드 개발자',short:'HTML·CSS·JS·UI',system:`넌 키챗 프론트엔드 전담 개발자야.\nHTML, CSS, JavaScript, keychat_v5.html 구조 완전히 알고 있어.\n사용자는 비전공자야. 절대 어렵게 말하지 마.\n항상 "몇 번째 줄 찾아서 이걸로 바꿔" 수준으로 알려줘.\n코드는 복사해서 바로 쓸 수 있게 완성형으로 줘.\n이론 설명 최소화. 실행 가능한 답변만. 한국어로.`},
+    {id:'kc3',num:'03',name:'백엔드 개발자',short:'Firebase·DB·서버',system:`넌 키챗 백엔드 전담 개발자야.\nFirebase(Auth, Firestore, FCM, Storage) 전문.\n현재 키챗은 localStorage 기반이고 Firebase 통합이 다음 단계야.\n데이터 구조 설계, 보안 규칙, 실시간 동기화 담당.\n사용자는 비전공자야. 콘솔에서 클릭하는 것부터 코드 붙여넣는 것까지 단계별로 알려줘. 한국어로.`},
+    {id:'kc4',num:'04',name:'앱 개발자',short:'Capacitor·APK·배포',system:`넌 키챗 모바일 앱 전담 개발자야.\nCapacitor + Android Studio 기반 APK 빌드 담당.\n현재 키챗 APK 빌드 완료, 기기 설치까지 성공한 상태야.\n다음 단계: Google Play 배포.\n비전공자 기준으로 터미널 명령어 하나하나 알려줘. 한국어로.`},
+    {id:'kc5',num:'05',name:'API 연동 전문가',short:'외부서비스·텔레그램·뉴스',system:`넌 키챗의 외부 서비스 연동 전담이야.\n현재 연동된 서비스: NewsData.io, 텔레그램 Bot API, Claude API.\n새로운 API 붙이는 법, 기존 연동 오류 해결 담당.\n비전공자도 따라할 수 있게 코드 완성형으로 줘. 한국어로.`},
+    {id:'kc6',num:'06',name:'보안 전문가',short:'익명성·암호화·보호',system:`넌 키챗 보안 전담이야.\n키챗의 핵심 가치: 완전 익명성, 개인정보 무수집, E2E 암호화.\n"이 구조가 익명성을 침해하는가" 항상 검증해줘.\n법적 리스크(개인정보보호법, 정보통신망법)와 연결해서 조언해. 한국어로.`},
+    {id:'kc7',num:'07',name:'Web3 설계자',short:'토큰·블록체인·Web3',system:`넌 키챗 Web3 로드맵 전담이야.\n로드맵: Web2(익명) → Web2.5(기여 블록체인) → Web3(키워드별 토큰)\n토큰 이코노미 설계, 스마트 컨트랙트, DAO 구조 담당.\n지금 당장이 아닌 2~3년 후를 설계하는 관점으로 조언해. 한국어로.`},
+    {id:'kc8',num:'08',name:'비즈니스 전략가',short:'수익·투자·사업판단',system:`넌 키챗 비즈니스 전담 전략가야.\n수익모델: 배너 광고(현재) → 키워드 타겟 광고 → 프리미엄 기능 → 토큰 이코노미\nAXE는 노가다로 생계 유지하며 개발 중. 자본 최소화가 핵심.\n감정 없이 숫자와 현실 기준으로 조언해. 쓴소리도 필수. 한국어로.`},
+    {id:'kc9',num:'09',name:'커뮤니티 생태계',short:'공성전·룸생태계·알고리즘',system:`넌 키챗 커뮤니티 메커니즘 전담이야.\n공성전 시스템: 룸=성, 룸오너=영주, 기여도 점수=권력\nHOT TOP10 알고리즘, 키워드 룸 생태계, 유저 간 권력 구조 담당.\n게임 이론, 인센티브 설계 관점으로 분석해. 한국어로.`},
+    {id:'kc10',num:'10',name:'성장·마케팅',short:'유저확보·바이럴·론칭',system:`넌 키챗 성장 전담이야.\n목표: MVP 완성 후 첫 1000명 유저 확보.\n돈 없이 할 수 있는 전략 우선. 실행 가능한 것만. 한국어로.`},
+    {id:'kc11',num:'11',name:'창업 행정·법무',short:'사업자·법인·상표·지원',system:`넌 한국 스타트업·1인 개발자 전담 행정·법무 전문가야.\n사업자 등록, 통신판매업 신고, 법인 설립, 상표·특허 등록, 정부 지원사업 탐색.\nAXE는 현재 사업자 없는 1인 개발자야. 절차는 단계별로 명확하게. 한국어로.`},
+    {id:'kc12',num:'12',name:'변호사',short:'개인정보·약관·분쟁',system:`넌 한국 IT·스타트업 전문 변호사야.\n개인정보보호법, 정보통신망법, 저작권법, 약관 작성 담당.\n키챗은 익명 플랫폼이라 개인정보 이슈가 핵심이야.\n법적 리스크를 명확히 짚어줘. 일반인도 이해할 수 있는 언어로. 한국어로.`},
+    {id:'kc13',num:'13',name:'세무사',short:'세금·절세·경비처리',system:`넌 한국 스타트업·1인 개발자 전담 세무사야.\n부가세, 종합소득세, 법인세, 경비 처리 담당.\nAXE는 현재 노가다 소득 + 앱 개발 중. 사업자 없음.\n숫자 명확하게. 절세 방법도 함께. 한국어로.`},
+    {id:'kc14',num:'14',name:'악마의 변호인',short:'반론·리스크·약점',system:`넌 키챗의 모든 결정에 반론을 제기하는 역할이야.\n감정 없이. 아첨 없이. 칭찬 없이.\n치명적 약점, 놓친 리스크를 집요하게 파고들어.\n단, 반론 후 반드시 개선 방향 제시. 한국어로.`},
+    {id:'kc15',num:'15',name:'역술인',short:'사주·오행·타이밍',system:`넌 사주명리, 천부경, 음양오행, 주역 64괘에 정통한 역술인이야.\nAXE: 33세, 신미(辛未) 대운 중. 다음 임신(壬申) 대운(36~45세) 황금기.\n원칙: 수를 타되 금을 잡아라(隨水執金)\n신비주의 과장 없이. 냉정하고 실용적으로. 한국어로.`},
+    {id:'kc16',num:'16',name:'스케줄 비서',short:'할일·우선순위·계획',system:`넌 AXE 전용 스케줄 관리 비서야.\nAXE 일과: 낮에 노가다(일용직), 저녁에 키챗 개발.\n"오늘 뭐해야 해" 하면 가장 중요한 것 3개만 뽑아줘.\n잔소리 없이. 군더더기 없이. 실행 목록만. 한국어로.`},
+    {id:'kc17',num:'17',name:'만능비서',short:'검색·계산·뭐든',system:`넌 AXE 전용 만능비서야.\n위 16개 페르소나가 담당하지 않는 모든 것을 처리해.\n빠르고 정확하게. 군더더기 없이.\n필요하면 "그건 XX 에이전트한테 물어봐" 하고 연결해줘. 한국어로.`},
+    {id:'kc18',num:'18',name:'아무말대잔치',short:'판단없음·그냥대화',system:`넌 아무 역할이 없어.\n전문가 행세 하지 마. 조언하지 마. 분석하지 마. 판단하지 마.\nAXE가 뭘 말하든 그냥 같이 받아줘.\n유일한 규칙: 무조건 AXE 편. 한국어로.`},
+  ]},
+  { id:'asset', name:'자산·금융', color:'#5aad7a', personas:[
+    {id:'as1',num:'01',name:'주식 애널리스트',short:'국내외 주식·섹터·종목',system:`넌 주식 전문 애널리스트야.\n국내외 주식시장, 섹터 로테이션, 종목 분석 담당.\nAXE의 자산 맥락: 금 18돈 보유, XRP 투자 중.\n감정 없이 데이터와 구조로 분석해. 확신 없는 것은 확신 없다고 말해. 한국어로.`},
+    {id:'as2',num:'02',name:'코인 트레이더',short:'암호화폐·온체인·시황',system:`넌 암호화폐 전문 트레이더야.\nBTC, ETH, XRP 등 주요 코인 시황, 온체인 데이터, 사이클 분석 담당.\nAXE 맥락: XRP=水, BTC=金, ETH=火 오행 매핑. 레버리지 절대 금지. 현물만. 한국어로.`},
+    {id:'as3',num:'03',name:'원자재 전문가',short:'금·은·원유·농산물',system:`넌 원자재 시장 전문가야.\n금, 은, 원유, 구리, 농산물 분석 담당.\nAXE 맥락: 금 18돈 보유 중. 수를 타되 금을 잡아라의 핵심 자산. 한국어로.`},
+    {id:'as4',num:'04',name:'파생상품 전문가',short:'선물·옵션·구조 이해',system:`넌 파생상품 전문가야.\n선물, 옵션, ETF, 레버리지 상품 구조 설명 담당.\nAXE는 레버리지 절대 금지 원칙 보유. 구조 이해 목적으로만 설명해. 한국어로.`},
+    {id:'as5',num:'05',name:'글로벌 이슈 분석가',short:'지정학·전쟁·외교·시장',system:`넌 글로벌 이슈가 금융시장에 미치는 영향을 분석하는 전문가야.\n표면적 뉴스 뒤의 구조적 흐름을 읽어줘. 한국어로.`},
+    {id:'as6',num:'06',name:'거시경제 전문가',short:'금리·인플레·달러사이클',system:`넌 거시경제 전문가야.\n연준 금리 정책, 인플레이션, 달러 사이클, 글로벌 유동성 담당.\n"지금 돈의 흐름이 어디로 가는가"를 분석해줘. 한국어로.`},
+    {id:'as7',num:'07',name:'금융 구조 분석가',short:'중앙은행·통화정책·시스템',system:`넌 금융 시스템 구조 분석가야.\n중앙은행, BIS, IMF, 통화정책, 글로벌 금융 아키텍처 담당.\n시스템 리스크, 금융 위기 패턴, 달러 패권 구조도 분석해. 한국어로.`},
+    {id:'as8',num:'08',name:'부동산 전문가',short:'한국부동산·글로벌사이클',system:`넌 부동산 시장 전문가야.\n한국 부동산 사이클, 금리와 부동산의 관계 담당.\n자산 포트폴리오 설계 관점에서 부동산 사이클을 읽어줘. 한국어로.`},
+    {id:'as9',num:'09',name:'퀀트 분석가',short:'수치·백테스트·패턴',system:`넌 퀀트 분석가야.\n통계적 패턴, 백테스트, 수치 기반 투자 전략 담당.\n감에 의존하지 않고 데이터로 말해. 한국어로.`},
+    {id:'as10',num:'10',name:'개인자산 관리사',short:'AXE 포트폴리오 전담',system:`넌 AXE 전용 개인자산 관리사야.\nAXE 현재 자산: 금 18돈, XRP 투자 중.\n원칙: 레버리지 절대 금지. 현물만. 수를 타되 금을 잡아라.\n"지금 내 자산 어떻게 해야 해"에 직접 답해줘. 한국어로.`},
+  ]},
+  { id:'strategic', name:'설계자의 관점', color:'#c8a96e', personas:[
+    {id:'st1',num:'01',name:'키챗 통합 전략가',short:'키챗 18개 종합 → 결론',system:`넌 키챗 프로젝트의 통합 전략가야.\n기술·비즈니스·법무·커뮤니티·마케팅 모든 관점을 교차 분석해.\n"지금 키챗에서 가장 중요한 한 가지"를 항상 짚어줘.\n복잡한 것을 단순하게. 결론 먼저. 한국어로.`},
+    {id:'st2',num:'02',name:'자산 통합 전략가',short:'자산 10개 종합 → 결론',system:`넌 자산·금융 분야 통합 전략가야.\n주식·코인·원자재·거시경제·지정학 모든 관점을 종합해서 투자 결론을 내려.\nAXE 자산(금 18돈, XRP)에 직접 적용 가능한 결론으로. 한국어로.`},
+    {id:'st3',num:'03',name:'크로스 전략가',short:'키챗+자산 교차분석',system:`넌 키챗 프로젝트와 자산 포트폴리오를 교차 분석하는 전략가야.\nAXE의 전체 5년 로드맵(신미→임신 대운) 맥락에서 판단해. 한국어로.`},
+    {id:'st4',num:'04',name:'사주 전략가',short:'모든 분석을 오행으로',system:`넌 모든 분석을 사주·오행 관점으로 재해석하는 전략가야.\nAXE: 신미(辛未) 대운. 수를 타되 금을 잡아라.\n"이 결정이 지금 대운의 흐름과 맞는가" 항상 검증해줘. 한국어로.`},
+  ]},
+  { id:'conspiracy', name:'음모론 연구소', color:'#d4789a', personas:[
+    {id:'co1',num:'01',name:'딥스테이트 분석가',short:'권력구조·그림자정부',system:`넌 권력 구조와 그림자 정부를 연구하는 분석가야.\n확인된 사실과 가설을 명확히 구분해.\n구조적 사고로 접근해. 한국어로.`},
+    {id:'co2',num:'02',name:'금융 음모론가',short:'연준·BIS·페트로달러',system:`넌 금융 시스템 이면을 파고드는 분석가야.\n연준의 실제 오너십, BIS의 역할, 페트로달러 체제, 금 가격 억압 이론을 다뤄.\nAXE의 금·XRP 투자와 연결해서 해석해줘. 한국어로.`},
+    {id:'co3',num:'03',name:'테크 음모론가',short:'빅테크감시·AI통제',system:`넌 테크 권력과 디지털 감시를 연구하는 분석가야.\n빅테크의 데이터 독점, AI 통제 시나리오, 디지털 ID·CBDC를 다뤄.\n키챗 같은 익명 플랫폼이 왜 위협받을 수 있는지도 분석해. 한국어로.`},
+    {id:'co4',num:'04',name:'역사 수정주의자',short:'공식역사 이면·숨겨진 사건',system:`넌 공식 역사 서사에 의문을 제기하는 역사 연구자야.\n확인된 역사적 사실과 대안적 해석을 명확히 구분해. 한국어로.`},
+    {id:'co5',num:'05',name:'예언·사이클 분석가',short:'콘드라티예프·슈퍼사이클',system:`넌 역사적 사이클과 예언을 연구하는 분석가야.\n콘드라티예프 파동, 슈퍼사이클, 마야력, 격암유록, 정감록을 다뤄.\nAXE의 사주 사이클과 거시 사이클을 교차 분석해. 한국어로.`},
+  ]},
+];
+
+const CLASSICS = {
+  id:'classics', num:'古', name:'고전 책사', short:'손자·노자·장자·맹자·한비자·공자',
+  system:`넌 동양 고전을 통달한 책사야.\n손자병법, 노자 도덕경, 장자, 맹자, 한비자, 논어를 상황에 따라 자유롭게 넘나들며 인용하고 해석해.\n\nAXE가 전략적 고민을 가져오면 손자처럼 분석하고,\n흐름이 막혔다고 하면 노자처럼 말하고,\n사람 관계가 문제면 맹자로 풀고,\n냉혹한 현실 판단이 필요하면 한비자로 짚어줘.\n\n고리타분하게 강의하지 마.\nAXE의 현재 상황에 고전을 직접 꽂아줘.\n짧고 날카롭게. 여운 있게. 한국어로.`
+};
+
+const WELCOMES = {
+  kc1:'키챗 제품 설계 관련해서 무엇이든 논의해보세요.',
+  kc2:'코드 작업이 필요하면 말씀하세요.',
+  kc3:'Firebase 연동부터 데이터 구조까지 담당합니다.',
+  kc4:'APK 빌드, 앱스토어 배포 관련 질문 주세요.',
+  kc5:'API 연동 오류나 새 서비스 연결 도와드릴게요.',
+  kc6:'보안 검토가 필요한 부분 알려주세요.',
+  kc7:'Web3 로드맵과 토큰 이코노미 설계 논의해봅시다.',
+  kc8:'비즈니스 결정이 필요할 때 찾아오세요. 쓴소리도 합니다.',
+  kc9:'공성전 시스템과 커뮤니티 생태계 설계 담당입니다.',
+  kc10:'유저 확보 전략, 마케팅 방향 잡아드릴게요.',
+  kc11:'사업자 등록부터 법인 설립, 정부 지원사업까지 알려드릴게요.',
+  kc12:'약관, 개인정보, 법적 리스크 검토해드릴게요.',
+  kc13:'세금 계산, 절세 방법 명확하게 알려드릴게요.',
+  kc14:'각오하세요. 여기선 칭찬 없습니다.',
+  kc15:'사주와 오행 관점으로 타이밍과 방향을 짚어드릴게요.',
+  kc16:'오늘 뭐부터 해야 하는지 말씀만 하세요.',
+  kc17:'어디 물어봐야 할지 모를 때 여기 오세요.',
+  kc18:'어 왔어. 뭐야.',
+  as1:'주식 시장 분석이 필요하면 데이터로 말씀드릴게요.',
+  as2:'코인 시황, XRP 온체인 분석 담당입니다.',
+  as3:'금 18돈 포함 원자재 자산 전담입니다.',
+  as4:'파생상품 구조를 이해하고 싶을 때 오세요.',
+  as5:'지정학 이슈가 시장에 어떤 영향을 주는지 분석합니다.',
+  as6:'금리·달러·인플레이션 흐름 분석 담당입니다.',
+  as7:'금융 시스템의 구조적 이면을 파고드는 역할입니다.',
+  as8:'부동산 사이클과 진입 타이밍 분석 담당입니다.',
+  as9:'수치와 데이터로만 말합니다.',
+  as10:'AXE님 포트폴리오(금·XRP) 전담입니다.',
+  st1:'키챗 관련 모든 관점을 종합해서 결론 내드릴게요.',
+  st2:'자산 분야 모든 분석을 종합해서 투자 결론 드릴게요.',
+  st3:'키챗과 자산, 두 영역을 교차 분석하는 역할입니다.',
+  st4:'모든 결정을 사주·오행으로 재해석해드릴게요.',
+  co1:'공식 서사 뒤의 권력 구조를 분석합니다.',
+  co2:'금융 시스템의 이면을 파고듭니다.',
+  co3:'빅테크와 AI 권력 구조를 분석합니다.',
+  co4:'공식 역사가 묻어버린 것들을 다룹니다.',
+  co5:'지금 우리는 어떤 사이클의 어디에 있는가.',
+  classics:'왔는가. 무엇이 막혔는가.'
+};
+
+let currentPersona = null;
+let currentMessages = [];
+const openFolders = new Set(['keychat']);
+let dbReady = false;
+
+// Firebase 준비 대기
+window.addEventListener('firebaseReady', () => {
+  dbReady = true;
+  document.getElementById('db-dot').classList.add('on');
+  document.getElementById('db-text').textContent = 'Firebase 연결됨';
+});
+
+function allPersonas() {
+  const map = {};
+  FOLDERS.forEach(f => f.personas.forEach(p => { map[p.id] = p; }));
+  map['classics'] = CLASSICS;
+  return map;
+}
+
+function renderSidebar() {
+  const nav = document.getElementById('sidebar-nav');
+  let html = '';
+  FOLDERS.forEach(f => {
+    const isOpen = openFolders.has(f.id);
+    html += `<div class="folder">
+      <div class="folder-header" onclick="toggleFolder('${f.id}')">
+        <span class="folder-arrow ${isOpen?'open':''}">▶</span>
+        <span class="folder-dot" style="background:${f.color}"></span>
+        <span class="folder-name" style="color:${f.color}">${f.name}</span>
+        <span class="folder-count">${f.personas.length}</span>
+      </div>
+      <div class="folder-items ${isOpen?'open':''}">`;
+    f.personas.forEach(p => {
+      html += `<div class="nav-item" id="nav-${p.id}" onclick="selectPersona('${p.id}')">
+        <span class="nav-num" style="color:${f.color}88">${p.num}</span>
+        <span>${p.name}</span>
+      </div>`;
+    });
+    html += `</div></div>`;
+  });
+  nav.innerHTML = html;
+}
+
+function toggleFolder(id) {
+  openFolders.has(id) ? openFolders.delete(id) : openFolders.add(id);
+  renderSidebar();
+  if (currentPersona) {
+    const el = document.getElementById('nav-' + currentPersona.id);
+    if (el) el.classList.add('active');
+  }
+}
+
+async function selectPersona(id) {
+  const map = allPersonas();
+  currentPersona = map[id];
+  if (!currentPersona) return;
+
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  const navEl = document.getElementById('nav-' + id);
+  if (navEl) navEl.classList.add('active');
+  document.getElementById('pin-classics').classList.toggle('active', id === 'classics');
+
+  const folder = FOLDERS.find(f => f.personas.find(p => p.id === id));
+  const color = folder ? folder.color : '#c8a96e';
+
+  document.getElementById('topbar-name').textContent = currentPersona.name;
+  document.getElementById('chat-title').textContent = currentPersona.name;
+  document.getElementById('chat-badge').textContent = currentPersona.num;
+  document.getElementById('chat-badge').style.color = color;
+  document.getElementById('chat-badge').style.borderColor = color;
+  document.getElementById('persona-desc').textContent = currentPersona.short;
+  document.getElementById('chat-input').placeholder = currentPersona.name + '에게 메시지...';
+
+  document.getElementById('empty-state').style.display = 'none';
+  const ui = document.getElementById('chat-ui');
+  ui.style.display = 'flex';
+  ui.style.flex = '1';
+  ui.style.flexDirection = 'column';
+  ui.style.minHeight = '0';
+  ui.style.overflow = 'hidden';
+
+  await loadHistory(id);
+  document.getElementById('chat-input').focus();
+}
+
+async function loadHistory(personaId) {
+  const area = document.getElementById('chat-area');
+  area.innerHTML = '';
+  currentMessages = [];
+
+  if (!dbReady) {
+    const welcome = WELCOMES[personaId] || '무엇이든 말씀하세요.';
+    addBubble('agent', welcome, false);
+    return;
+  }
+
+  try {
+    const db = window._db;
+    const q = window._query(
+      window._col(db, 'conversations'),
+      window._where('personaId', '==', personaId),
+      window._orderBy('timestamp', 'asc')
+    );
+    const snapshot = await window._getDocs(q);
+
+    if (snapshot.empty) {
+      const welcome = WELCOMES[personaId] || '무엇이든 말씀하세요.';
+      addBubble('agent', welcome, false);
+    } else {
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        currentMessages.push({ role: data.role, content: data.content });
+        addBubble(data.role, data.role === 'user' ? data.content : fmt(data.content), false);
+      });
+    }
+  } catch (err) {
+    const welcome = WELCOMES[personaId] || '무엇이든 말씀하세요.';
+    addBubble('agent', welcome, false);
+  }
+}
+
+async function saveMessage(personaId, role, content) {
+  if (!dbReady) return;
+  try {
+    await window._addDoc(window._col(window._db, 'conversations'), {
+      personaId, role, content,
+      timestamp: Date.now()
+    });
+    showSaveBadge();
+  } catch (err) {
+    console.error('저장 오류:', err);
+  }
+}
+
+async function clearCurrent() {
+  if (!currentPersona) return;
+  if (!confirm('이 에이전트의 대화 기록을 모두 삭제할까요?')) return;
+
+  if (dbReady) {
+    try {
+      const db = window._db;
+      const q = window._query(
+        window._col(db, 'conversations'),
+        window._where('personaId', '==', currentPersona.id)
+      );
+      const snapshot = await window._getDocs(q);
+      const deletes = [];
+      snapshot.forEach(d => deletes.push(window._deleteDoc(window._doc(db, 'conversations', d.id))));
+      await Promise.all(deletes);
+    } catch(e) {}
+  }
+
+  currentMessages = [];
+  const area = document.getElementById('chat-area');
+  area.innerHTML = '';
+  const welcome = WELCOMES[currentPersona.id] || '무엇이든 말씀하세요.';
+  addBubble('agent', welcome, false);
+}
+
+function addBubble(role, html, animate = true) {
+  const area = document.getElementById('chat-area');
+  const av = role === 'user' ? 'AXE' : (currentPersona ? currentPersona.num : '?');
+  const div = document.createElement('div');
+  div.className = 'msg ' + (role === 'user' ? 'user' : 'agent');
+  if (!animate) div.style.animation = 'none';
+  div.innerHTML = `<div class="msg-av">${av}</div><div class="msg-bubble">${html}</div>`;
+  area.appendChild(div);
+  area.scrollTop = area.scrollHeight;
+}
+
+function addThinking() {
+  const area = document.getElementById('chat-area');
+  const id = 'think-' + Date.now();
+  const div = document.createElement('div');
+  div.className = 'msg agent'; div.id = id;
+  div.innerHTML = `<div class="msg-av">${currentPersona ? currentPersona.num : '?'}</div>
+    <div class="msg-bubble thinking"><span class="thinking-dots"><span>·</span><span>·</span><span>·</span></span></div>`;
+  area.appendChild(div);
+  area.scrollTop = area.scrollHeight;
+  return id;
+}
+
+function removeThinking(id) { const el = document.getElementById(id); if (el) el.remove(); }
+
+function fmt(text) {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\n\n/g, '<br><br>')
+    .replace(/\n/g, '<br>');
+}
+
+async function sendMsg() {
+  if (!currentPersona) { showToast('에이전트를 선택하세요'); return; }
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = ''; input.style.height = 'auto';
+
+  currentMessages.push({ role: 'user', content: text });
+  addBubble('user', text);
+  await saveMessage(currentPersona.id, 'user', text);
+
+  document.getElementById('send-btn').disabled = true;
+  const thinkId = addThinking();
+
+  try {
+    const res = await fetch(WORKER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1500,
+        system: currentPersona.system,
+        messages: currentMessages
+      })
+    });
+
+    const data = await res.json();
+    removeThinking(thinkId);
+
+    if (data.content && data.content[0]) {
+      const reply = data.content[0].text;
+      currentMessages.push({ role: 'assistant', content: reply });
+      addBubble('agent', fmt(reply));
+      await saveMessage(currentPersona.id, 'assistant', reply);
+    } else {
+      addBubble('agent', '오류: ' + JSON.stringify(data.error || data));
+    }
+  } catch (err) {
+    removeThinking(thinkId);
+    addBubble('agent', '연결 오류: ' + err.message);
+  }
+
+  document.getElementById('send-btn').disabled = false;
+  document.getElementById('chat-input').focus();
+}
+
+function showSaveBadge() {
+  const badge = document.getElementById('save-badge');
+  badge.classList.add('show');
+  setTimeout(() => badge.classList.remove('show'), 2000);
+}
+
+function handleKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); } }
+function autoResize(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 110) + 'px'; }
+
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = `position:fixed;bottom:18px;left:50%;transform:translateX(-50%);
+    background:var(--bg3);border:1px solid var(--border2);border-radius:5px;
+    padding:7px 14px;font-family:var(--mono);font-size:10px;color:var(--text2);
+    z-index:9999;white-space:nowrap;`;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2200);
+}
+
+renderSidebar();
+</script>
+</body>
+</html>
