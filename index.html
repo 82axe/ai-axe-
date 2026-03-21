@@ -24,6 +24,7 @@
   const db = getFirestore(app);
 
   const WORKER_URL = 'https://cold-leaf-86c9axe-api.www-exclusive-82.workers.dev';
+let claudeApiKey = localStorage.getItem('axe_claude_key') || '';
 
   window._db = db;
   window._col = collection;
@@ -100,6 +101,8 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .topbar-spacer{flex:1;}
 .btn{background:var(--bg3);border:1px solid var(--border2);border-radius:5px;padding:5px 11px;font-family:var(--mono);font-size:10px;color:var(--text2);cursor:pointer;transition:all 0.12s;white-space:nowrap;}
 .btn:hover{border-color:var(--accent2);color:var(--accent);}
+.btn.primary{background:var(--accent2);border-color:var(--accent);color:#fff;}
+.btn.primary:hover{background:var(--accent);}
 .btn.danger:hover{border-color:var(--coral);color:var(--coral);}
 
 /* 채팅 */
@@ -176,7 +179,10 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
     <div class="topbar-module">AXE / <span id="topbar-name">—</span></div>
     <div class="topbar-spacer"></div>
     <span class="save-badge" id="save-badge">저장됨</span>
-    <button class="btn danger" onclick="clearCurrent()" style="margin-left:8px;">대화 초기화</button>
+    <input type="password" id="api-key-input" placeholder="sk-ant-... API 키 입력" 
+      style="background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:4px 10px;font-family:var(--mono);font-size:10px;color:var(--text2);width:200px;outline:none;margin-left:8px;">
+    <button class="btn primary" onclick="saveApiKey()" style="margin-left:6px;background:var(--accent2);border-color:var(--accent);color:#fff;">저장</button>
+    <button class="btn danger" onclick="clearCurrent()" style="margin-left:6px;">초기화</button>
   </div>
 
   <div class="chat-wrap" id="chat-wrap">
@@ -351,6 +357,13 @@ function renderSidebar() {
 function toggleFolder(id) {
   openFolders.has(id) ? openFolders.delete(id) : openFolders.add(id);
   renderSidebar();
+
+// 저장된 API 키 불러오기
+const savedKey = localStorage.getItem('axe_claude_key');
+if (savedKey) {
+  claudeApiKey = savedKey;
+  document.getElementById('api-key-input').placeholder = '키 저장됨 ✓';
+}
   if (currentPersona) {
     const el = document.getElementById('nav-' + currentPersona.id);
     if (el) el.classList.add('active');
@@ -497,8 +510,19 @@ function fmt(text) {
     .replace(/\n/g, '<br>');
 }
 
+function saveApiKey() {
+  const key = document.getElementById('api-key-input').value.trim();
+  if (!key.startsWith('sk-ant-')) { showToast('올바른 API 키를 입력하세요'); return; }
+  claudeApiKey = key;
+  localStorage.setItem('axe_claude_key', key);
+  document.getElementById('api-key-input').value = '';
+  document.getElementById('api-key-input').placeholder = '키 저장됨 ✓';
+  showToast('API 키 저장됨');
+}
+
 async function sendMsg() {
   if (!currentPersona) { showToast('에이전트를 선택하세요'); return; }
+  if (!claudeApiKey) { showToast('API 키를 입력하세요'); return; }
   const input = document.getElementById('chat-input');
   const text = input.value.trim();
   if (!text) return;
@@ -512,9 +536,14 @@ async function sendMsg() {
   const thinkId = addThinking();
 
   try {
-    const res = await fetch(WORKER_URL, {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': claudeApiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1500,
